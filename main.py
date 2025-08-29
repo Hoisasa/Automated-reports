@@ -28,12 +28,83 @@ from configparser import ConfigParser
 from dearpygui.dearpygui import configure_item
 from pandas.tseries.offsets import BDay
 
+from DatesHandling.masks.mask_bdays import mask_bdays
 from GUI.customWidgets.input_table import df_table
 from fonts.font_setup import font_setup
 from pipe import select, Pipe, tee
 
 
+def set_active_columns():
+	for day in weekday_colors.keys():
+		_id = current_client["value"]
+		dpg.configure_item(day, enabled=config.getboolean(f"Weekdays:{_id}", day))
+		pass
 
+def is_active(id):
+	return config.getboolean(f"Client:{id}", "active")
+
+def get_name(id):
+	return config.get(f"Client:{id}", "name")
+
+def update_WDcb(id: int):
+	checkboxes = dpg.get_item_children("workDaysRow")
+	for day in checkboxes[1]:
+		# check parsed children for key in their tag
+		# the key is WDcb short for Weekdays checkbox
+		name_check = dpg.get_item_alias(day)
+		if "WDcb" not in name_check:
+			raise Exception("failed to parse ids from row")
+		correct_name = name_check[:3]
+		new_cb_state = config.getboolean(f"Weekdays:{id}", correct_name)
+		dpg.set_value(day, new_cb_state)
+
+# def set_cb_values():
+# 	for i in range(1, max_id):
+# 		for cfg in (list(df_services.columns)):
+# 			defaults = { day: False for day in (list(weekday_colors.keys()) + ["Wee",])}
+# 			config[f"Generator:{cfg}:{i}"] = defaults
+#
+# 	with open("configs/clientsbase.ini", "w", encoding="utf-8") as f:
+# 		config.write(f)
+			
+			
+			
+def set_cb_values(id: int):
+	for cfg in list(df_services.columns):
+		week_value = config.getboolean(f"Generator:{cfg}:{id}", "Wee")
+		dpg.set_value(cfg + 'Wee', week_value)
+		for day in list(weekday_colors.keys()):
+			new_cb_state = True if week_value else config.getboolean(f"Generator:{cfg}:{id}", day)
+			dpg.set_value(cfg + day, new_cb_state)
+		
+	pass
+
+def combo_client_callback(sender, app_data, user_data):
+	_id = ids_dict[app_data]
+	user_data["value"] = _id
+	update_WDcb(_id)
+	set_cb_values(_id)
+	set_active_columns()
+	step_one("ignored", "ignored", {"dataframe": df, "id": current_client["value"]})
+	pass
+
+# Workdays checkbox
+def WDcb_callback(sender, app_data, user_data):
+	build_string = f"Weekdays:{user_data["value"]}"
+	config[build_string][sender[:3]] = str(app_data)
+	with open("configs/clientsbase.ini", "w", encoding="utf-8") as f:
+		config.write(f)
+	set_active_columns()
+	pass
+
+# Generator bdays checkboxes
+def GDcb_callback(sender, app_data, user_data):
+	build_string = f"Generator:{sender[:-3]}:{user_data["value"]}"
+	config[build_string][sender[-3:]] = str(app_data)
+	with open("configs/clientsbase.ini", "w", encoding="utf-8") as f:
+		config.write(f)
+	set_cb_values(user_data["value"])
+	pass
 
 
 @Pipe
@@ -67,56 +138,47 @@ def mask_notempty(checkbox_values, df):
 		if status:
 			mask_active[i] = next(checkbox_iterator)
 	return mask_active
+	pass
+
 
 
 @Pipe
 def time_val_matrix(list_of_services):
 	pass
 
-def set_active_columns():
-	for day in weekday_colors.keys():
-		_id = current_client["value"]
-		dpg.configure_item(day, enabled=config.getboolean(f"Weekdays:{_id}", day))
-		pass
-
-def is_active(id):
-	return config.getboolean(f"Client:{id}", "active")
-
-def get_name(id):
-	return config.get(f"Client:{id}", "name")
-
-def update_WDcb(id: int):
-	checkboxes = dpg.get_item_children("workDaysRow")
-	for day in checkboxes[1]:
-		# check parsed children for key in their tag
-		# the key is WDcb short for Weekdays checkbox
-		name_check = dpg.get_item_alias(day)
-		if "WDcb" not in name_check:
-			raise Exception("failed to parse ids from row")
-		correct_name = name_check[:3]
-		new_cb_state = config.getboolean(f"Weekdays:{id}", correct_name)
-		dpg.set_value(day, new_cb_state)
-
-def combo_client_callback(sender, app_data, user_data):
-	_id = ids_dict[app_data]
-	user_data["value"] = _id
-	update_WDcb(_id)
-	set_active_columns()
-	pass
-
-def WDcb_callback(sender, app_data, user_data):
-	build_string = f"Weekdays:{user_data["value"]}"
-	config[build_string][sender[:3]] = str(app_data)
-	with open("configs/clientsbase.ini", "w", encoding="utf-8") as f:
-		config.write(f)
-	set_active_columns()
-	pass
+# def step_one(sender, app_data, user_data):
+# 	mask_columns = 'Active' | organised_child_data() | checkbox_states() | mask_notempty(user_data)
+# 	updated_user_data = mask_columns | time_val_matrix(user_data)
+# 	user_data.loc[:, mask_columns] = pd.DataFrame(matrix, columns=user_data.columns.loc[mask_columns])
+# 	update_table(user_data)
 
 def step_one(sender, app_data, user_data):
-	mask_columns = 'Active' | organised_child_data() | checkbox_states() | mask_notempty(user_data)
-	updated_user_data = mask_columns | time_val_matrix(user_data)
-	user_data.loc[:, mask_columns] = pd.DataFrame(matrix, columns=user_data.columns.loc[mask_columns])
-	update_table(user_data)
+	_df = user_data["dataframe"]
+	_id = user_data["id"]
+	not_empty = list()
+	for cfg in list(df_services.columns):
+		allconf = config[f"Generator:{cfg}:{_id}"].values()
+		if "True" in list(allconf):
+			not_empty.append(cfg)
+	
+	weekdays = [day for day in weekday_colors if config.getboolean(f"Weekdays:{_id}", day)]
+	full_mask = pd.DataFrame(False, index=_df.index, columns=_df.columns)
+	
+	for cfg in not_empty:
+		build_string = f"Generator:{cfg}:{_id}"
+	
+		# we get all days if a key Wee is true or get each day separately from config otherwise
+		weekmask = weekdays if config.getboolean(build_string, "Wee") else\
+			[day for day in weekdays if config.getboolean(build_string, day)]
+		
+		weekmask = [True if day in weekmask else False for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] ]
+	print(full_mask.to_string(header=False))
+	
+	df_copy = pd.DataFrame(None, index=_df.index, columns=_df.columns)
+	df_copy.Date = _df.Date
+	df_copy[full_mask] = 20
+	print(df_copy.fillna('').to_string(header=False))
+	pass
 
 # for index, service in enumerate(list_of_services):
 #
@@ -134,7 +196,7 @@ dpg.create_context()
 config = ConfigParser()
 config.read("configs/clientsbase.ini", encoding="utf-8")
 
-max_id = int(config.sections()[-1].split(sep=":")[1]) + 1
+max_id = int(config.sections()[-1].split(sep=":")[-1]) + 1
 clients_dict = {id: get_name(id) for id in range(1, max_id)}
 ids_dict = {get_name(id): id for id in range(1, max_id)}
 current_client = {"value": 1}
@@ -171,6 +233,10 @@ for key, value in weekday_colors.items():
 			dpg.add_theme_color(dpg.mvThemeCol_Text, (20, 20, 20, 255), category=dpg.mvThemeCat_Core)
 	weekday_themes.append(theme)
 
+
+
+
+
 with dpg.window(label='GeneratorConfig', tag='GeneratorConfig', width=1500, show=False, popup=True) as conf:
 	with dpg.table(tag='ConfigView', header_row=True,
 				   row_background=False, borders_innerH=False,
@@ -192,13 +258,13 @@ with dpg.window(label='GeneratorConfig', tag='GeneratorConfig', width=1500, show
 			with dpg.table_row(label=cfg + 'cfg'):
 				dpg.add_text(cfg, label=cfg + 'name')
 				dpg.add_checkbox(tag=f'{cfg}Active', default_value=True)
-				dpg.add_checkbox(tag=f'{cfg}Wee')
-				dpg.add_checkbox(tag=f'{cfg}Mon')
-				dpg.add_checkbox(tag=f'{cfg}Tue')
-				dpg.add_checkbox(tag=f'{cfg}Wed')
-				dpg.add_checkbox(tag=f'{cfg}Thu')
-				dpg.add_checkbox(tag=f'{cfg}Fri')
-	
+				dpg.add_checkbox(tag=f'{cfg}Wee', callback=GDcb_callback, user_data=current_client)
+				dpg.add_checkbox(tag=f'{cfg}Mon', callback=GDcb_callback, user_data=current_client)
+				dpg.add_checkbox(tag=f'{cfg}Tue', callback=GDcb_callback, user_data=current_client)
+				dpg.add_checkbox(tag=f'{cfg}Wed', callback=GDcb_callback, user_data=current_client)
+				dpg.add_checkbox(tag=f'{cfg}Thu', callback=GDcb_callback, user_data=current_client)
+				dpg.add_checkbox(tag=f'{cfg}Fri', callback=GDcb_callback, user_data=current_client)
+	set_cb_values(current_client["value"])
 	set_active_columns()
 
 with dpg.window(label='Options', tag='Options', width=600, show=True, popup=True) as conf:
@@ -248,7 +314,7 @@ with dpg.window(label='Row Example', tag='Primary Window') as window:
 		else:
 			dpg.configure_item(str(index), enabled=False, show=False)
 
-# dpg.show_item_registry()
+dpg.show_item_registry()
 dpg.create_viewport(x_pos=480, y_pos=300, width=960, height=540)
 dpg.setup_dearpygui()
 dpg.set_primary_window("Primary Window", True)
@@ -257,6 +323,7 @@ dpg.show_viewport()
 #
 # result = "Active" | organised_child_data() | checkbox_states() | mask_notempty(df)
 # print(result)
+
 
 dpg.start_dearpygui()
 dpg.destroy_context()

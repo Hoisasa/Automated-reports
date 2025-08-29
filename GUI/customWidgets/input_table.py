@@ -30,4 +30,3 @@ def df_table(df, transpose= False):
 						input_cell = dpg.add_input_text(default_value=cell_value, width=33, height=16)
 						dpg.bind_item_theme(input_cell, item_theme)
 						
-						
