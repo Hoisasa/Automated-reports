@@ -24,6 +24,8 @@ import numpy as np
 import pandas as pd
 
 from configparser import ConfigParser
+
+from dearpygui.dearpygui import configure_item
 from pandas.tseries.offsets import BDay
 
 from GUI.customWidgets.input_table import df_table
@@ -31,11 +33,7 @@ from fonts.font_setup import font_setup
 from pipe import select, Pipe, tee
 
 
-def step_one(sender, app_data, user_data):
-	mask_columns = 'Active' | organised_child_data() | checkbox_states() | mask_notempty(user_data)
-	updated_user_data = mask_columns | time_val_matrix(user_data)
-	user_data.loc[:, mask_columns] = pd.DataFrame(matrix, columns=user_data.columns.loc[mask_columns])
-	update_table(user_data)
+
 
 
 @Pipe
@@ -75,6 +73,50 @@ def mask_notempty(checkbox_values, df):
 def time_val_matrix(list_of_services):
 	pass
 
+def set_active_columns():
+	for day in weekday_colors.keys():
+		_id = current_client["value"]
+		dpg.configure_item(day, enabled=config.getboolean(f"Weekdays:{_id}", day))
+		pass
+
+def is_active(id):
+	return config.getboolean(f"Client:{id}", "active")
+
+def get_name(id):
+	return config.get(f"Client:{id}", "name")
+
+def update_WDcb(id: int):
+	checkboxes = dpg.get_item_children("workDaysRow")
+	for day in checkboxes[1]:
+		# check parsed children for key in their tag
+		# the key is WDcb short for Weekdays checkbox
+		name_check = dpg.get_item_alias(day)
+		if "WDcb" not in name_check:
+			raise Exception("failed to parse ids from row")
+		correct_name = name_check[:3]
+		new_cb_state = config.getboolean(f"Weekdays:{id}", correct_name)
+		dpg.set_value(day, new_cb_state)
+
+def combo_client_callback(sender, app_data, user_data):
+	_id = ids_dict[app_data]
+	user_data["value"] = _id
+	update_WDcb(_id)
+	set_active_columns()
+	pass
+
+def WDcb_callback(sender, app_data, user_data):
+	build_string = f"Weekdays:{user_data["value"]}"
+	config[build_string][sender[:3]] = str(app_data)
+	with open("configs/clientsbase.ini", "w", encoding="utf-8") as f:
+		config.write(f)
+	set_active_columns()
+	pass
+
+def step_one(sender, app_data, user_data):
+	mask_columns = 'Active' | organised_child_data() | checkbox_states() | mask_notempty(user_data)
+	updated_user_data = mask_columns | time_val_matrix(user_data)
+	user_data.loc[:, mask_columns] = pd.DataFrame(matrix, columns=user_data.columns.loc[mask_columns])
+	update_table(user_data)
 
 # for index, service in enumerate(list_of_services):
 #
@@ -87,12 +129,16 @@ def time_val_matrix(list_of_services):
 # def update_table():
 # 	pass
 
-def add_new_client():
-	config = ConfigParser()
-	config.read
-
-
 dpg.create_context()
+
+config = ConfigParser()
+config.read("configs/clientsbase.ini", encoding="utf-8")
+
+max_id = int(config.sections()[-1].split(sep=":")[1]) + 1
+clients_dict = {id: get_name(id) for id in range(1, max_id)}
+ids_dict = {get_name(id): id for id in range(1, max_id)}
+current_client = {"value": 1}
+
 
 df = pd.read_excel('data/Temp.xlsx')
 for i, col in enumerate(df.columns):
@@ -126,7 +172,10 @@ for key, value in weekday_colors.items():
 	weekday_themes.append(theme)
 
 with dpg.window(label='GeneratorConfig', tag='GeneratorConfig', width=1500, show=False, popup=True) as conf:
-	with dpg.table(tag='ConfigView', header_row=True, row_background=False, borders_innerH=False, borders_outerH=False, borders_innerV=False, borders_outerV=False) as cfg_table:
+	with dpg.table(tag='ConfigView', header_row=True,
+				   row_background=False, borders_innerH=False,
+				   borders_outerH=False, borders_innerV=False,
+				   borders_outerV=False) as cfg_table:
 		
 		dpg.add_table_column(label='Сервис', tag='param name', init_width_or_weight=800, width_fixed=True)
 		dpg.add_table_column(label='ВКЛ', tag='Active', init_width_or_weight=33, width_fixed=True)
@@ -136,6 +185,8 @@ with dpg.window(label='GeneratorConfig', tag='GeneratorConfig', width=1500, show
 		dpg.add_table_column(label='Ср', tag='Wed', init_width_or_weight=33, width_fixed=True)
 		dpg.add_table_column(label='Чт', tag='Thu', init_width_or_weight=33, width_fixed=True)
 		dpg.add_table_column(label='Пт', tag='Fri', init_width_or_weight=33, width_fixed=True)
+		
+
 		
 		for cfg in list(df_services.columns):
 			with dpg.table_row(label=cfg + 'cfg'):
@@ -147,16 +198,45 @@ with dpg.window(label='GeneratorConfig', tag='GeneratorConfig', width=1500, show
 				dpg.add_checkbox(tag=f'{cfg}Wed')
 				dpg.add_checkbox(tag=f'{cfg}Thu')
 				dpg.add_checkbox(tag=f'{cfg}Fri')
+	
+	set_active_columns()
 
-with dpg.window(label='Options', tag='Options', width=600, show=False, popup=True) as conf:
-	dpg.add_combo(("Default",), label="combo", default_value="Default")
-	dpg.add_button(label="Add client", tag="addClient")
+with dpg.window(label='Options', tag='Options', width=600, show=True, popup=True) as conf:
+	dpg.add_combo(list(clients_dict.values()),
+				  label="Список клиентов", tag="combo_clients",
+				  default_value=list(clients_dict.values())[0],
+				  callback=combo_client_callback,
+				  user_data=current_client,
+				  )
+	
+	with dpg.table(tag='Weekdays', header_row=True,
+				   row_background=False, borders_innerH=False,
+				   borders_outerH=False, borders_innerV=False,
+				   borders_outerV=False) as cfg_table:
+		dpg.add_table_column(label='Пн', tag='MonWD', init_width_or_weight=33, width_fixed=True)
+		dpg.add_table_column(label='Вт', tag='TueWD', init_width_or_weight=33, width_fixed=True)
+		dpg.add_table_column(label='Ср', tag='WedWD', init_width_or_weight=33, width_fixed=True)
+		dpg.add_table_column(label='Чт', tag='ThuWD', init_width_or_weight=33, width_fixed=True)
+		dpg.add_table_column(label='Пт', tag='FriWD', init_width_or_weight=33, width_fixed=True)
+		
+		with dpg.table_row(tag= "workDaysRow"):
+			dpg.add_checkbox(tag=f'MonWDcb', callback=WDcb_callback, user_data=current_client)
+			dpg.add_checkbox(tag=f'TueWDcb', callback=WDcb_callback, user_data=current_client)
+			dpg.add_checkbox(tag=f'WedWDcb', callback=WDcb_callback, user_data=current_client)
+			dpg.add_checkbox(tag=f'ThuWDcb', callback=WDcb_callback, user_data=current_client)
+			dpg.add_checkbox(tag=f'FriWDcb', callback=WDcb_callback, user_data=current_client)
+	
+	update_WDcb(current_client["value"])
+		
+	pass
 
 # dpg.add_button(label='Apply', callback=printPos, user_data = df)
 
 with dpg.handler_registry():
 	dpg.add_key_down_handler(key=dpg.mvKey_F1, callback=lambda: dpg.configure_item("GeneratorConfig", show=True))
+	dpg.add_key_down_handler(key=dpg.mvKey_F2, callback=lambda: dpg.configure_item("Options", show=True))
 	dpg.add_key_down_handler(key=dpg.mvKey_Escape, callback=lambda: dpg.configure_item("GeneratorConfig", show=False))
+	dpg.add_key_down_handler(key=dpg.mvKey_Escape, callback=lambda: dpg.configure_item("Options", show=False))
 
 with dpg.window(label='Row Example', tag='Primary Window') as window:
 	df_table(df, True)
@@ -168,7 +248,7 @@ with dpg.window(label='Row Example', tag='Primary Window') as window:
 		else:
 			dpg.configure_item(str(index), enabled=False, show=False)
 
-dpg.show_item_registry()
+# dpg.show_item_registry()
 dpg.create_viewport(x_pos=480, y_pos=300, width=960, height=540)
 dpg.setup_dearpygui()
 dpg.set_primary_window("Primary Window", True)

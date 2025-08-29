@@ -40,6 +40,7 @@ for num, (client, group) in enumerate(clientsBase.items()):
 	config[f"Client:{num}"] = {}
 	config[f"Client:{num}"]["Name"] = client
 	config[f"Client:{num}"]["Group"] = group
+	config[f"Client:{num}"]["Active"] = "True"
 	
 	default_weekdays(num, group)
 	
