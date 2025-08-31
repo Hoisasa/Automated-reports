@@ -18,6 +18,7 @@
 #
 #
 # df.to_excel(r'data\Temp.xlsx', index=False)
+from timeit import timeit
 
 import dearpygui.dearpygui as dpg
 import numpy as np
@@ -173,12 +174,12 @@ def step_one(sender, app_data, user_data):
 		
 		weekmask = [True if day in weekmask else False for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] ]
 		full_mask[cfg] = mask_bdays(_df, weekmask)
-	print(full_mask.to_string(header=False))
+	# print(full_mask.to_string(header=False))
 	
 	df_copy = pd.DataFrame(None, index=_df.index, columns=_df.columns)
 	df_copy.Date = _df.Date
 	df_copy[full_mask] = 20
-	print(df_copy.fillna('').to_string(header=False))
+	# print(df_copy.fillna('').to_string(header=False))
 	table_update(df_copy)
 	pass
 
@@ -327,6 +328,13 @@ dpg.show_viewport()
 # result = "Active" | organised_child_data() | checkbox_states() | mask_notempty(df)
 # print(result)
 
+def timetest_tbupdate():
+	combo_client_callback("ignored", "Далінчук", current_client)
+	combo_client_callback("ignored", "Карпенко", current_client)
+
+
+upd_exec_time = timeit(timetest_tbupdate, number= 100)
+print(upd_exec_time)
 
 dpg.start_dearpygui()
 dpg.destroy_context()

@@ -40,8 +40,9 @@ def table_update(_df):
 		if index.startswith('-'):
 			row_children = np.array(dpg.get_item_children(index)[1][1:])
 			row_children += 1
-			for cell in zip(row_children, row):
-				dpg.set_value(cell +1, row)
+			stack = np.stack((row_children, row.to_numpy()), axis=1)
+			for cell in stack:
+				dpg.set_value(*cell)
 		
 
 
