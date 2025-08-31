@@ -29,7 +29,7 @@ from dearpygui.dearpygui import configure_item
 from pandas.tseries.offsets import BDay
 
 from DatesHandling.masks.mask_bdays import mask_bdays
-from GUI.customWidgets.input_table import df_table
+from GUI.customWidgets.input_table import df_table, table_update
 from fonts.font_setup import font_setup
 from pipe import select, Pipe, tee
 
@@ -172,12 +172,14 @@ def step_one(sender, app_data, user_data):
 			[day for day in weekdays if config.getboolean(build_string, day)]
 		
 		weekmask = [True if day in weekmask else False for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] ]
+		full_mask[cfg] = mask_bdays(_df, weekmask)
 	print(full_mask.to_string(header=False))
 	
 	df_copy = pd.DataFrame(None, index=_df.index, columns=_df.columns)
 	df_copy.Date = _df.Date
 	df_copy[full_mask] = 20
 	print(df_copy.fillna('').to_string(header=False))
+	table_update(df_copy)
 	pass
 
 # for index, service in enumerate(list_of_services):
@@ -313,7 +315,8 @@ with dpg.window(label='Row Example', tag='Primary Window') as window:
 			dpg.bind_item_theme(str(index), weekday_themes[day.weekday()])
 		else:
 			dpg.configure_item(str(index), enabled=False, show=False)
-
+			pass
+		
 dpg.show_item_registry()
 dpg.create_viewport(x_pos=480, y_pos=300, width=960, height=540)
 dpg.setup_dearpygui()

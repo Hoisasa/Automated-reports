@@ -1,5 +1,9 @@
+import random
+
 import dearpygui.dearpygui as dpg
+import numpy as np
 import pandas as pd
+
 
 def df_table(df, transpose= False):
 	df_on_display = df.T if transpose else df
@@ -29,4 +33,17 @@ def df_table(df, transpose= False):
 							cell_value = int(cell_value)
 						input_cell = dpg.add_input_text(default_value=cell_value, width=33, height=16)
 						dpg.bind_item_theme(input_cell, item_theme)
+						
+
+def table_update(_df):
+	for index, row in _df.T.fillna('').iterrows():
+		if index.startswith('-'):
+			row_children = np.array(dpg.get_item_children(index)[1][1:])
+			row_children += 1
+			for cell in zip(row_children, row):
+				dpg.set_value(cell +1, row)
+		
+
+
+	
 						
